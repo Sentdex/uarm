@@ -3,7 +3,7 @@ import numpy as np
 
 RESCALE_FACTOR = 0.5
 
-cap = cv2.VideoCapture(1)
+cap = cv2.VideoCapture(0)
 cap.set(3, int(1280*RESCALE_FACTOR))
 cap.set(4, int(720*RESCALE_FACTOR))
 
