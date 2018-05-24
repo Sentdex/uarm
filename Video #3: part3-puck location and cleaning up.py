@@ -23,15 +23,15 @@ while 1:
     upper_red = np.array([20, 255, 255])
 
     mask = cv2.inRange(hsv, lower_red, upper_red)
-    res = cv2.bitwise_and(img_crop, img_crop, mask= mask)
-    blur = cv2.GaussianBlur(res,(15,15),0)
-    cv2.imshow('Gaussian Blurring',blur)
+    res = cv2.bitwise_and(img_crop, img_crop, mask=mask)
+    blur = cv2.GaussianBlur(res, (15, 15), 0)
+    cv2.imshow('Gaussian Blurring', blur)
 
     _, puck = cv2.threshold(blur, 70, 255, cv2.THRESH_BINARY)
-    cv2.imshow('Puck',puck)
+    cv2.imshow('Puck', puck)
 
-    xs = np.where(puck!=0)[1]
-    ys = np.where(puck!=0)[0]
+    xs = np.where(puck != 0)[1]
+    ys = np.where(puck != 0)[0]
 
     xstd = np.std(xs)
     ystd = np.std(ys)
@@ -39,19 +39,12 @@ while 1:
     x_init_avg = np.mean(xs)
     y_init_avg = np.mean(ys)
 
-    # possibly if std is too high, we can consider that we have a problem?
-    #print(xstd,ystd)
-
     xs = [x for x in xs if x <= x_init_avg+xstd or x >= x_init_avg-xstd]
     ys = [y for y in ys if y <= y_init_avg+xstd or y >= y_init_avg-xstd]
     xavg = np.mean(xs)
     yavg = np.mean(ys)
 
-    print(xavg,yavg)
-
-
-
-
+    print(xavg, yavg)
 
     k = cv2.waitKey(5) & 0xFF
     if k == 27:
