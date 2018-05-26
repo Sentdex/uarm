@@ -1,0 +1,118 @@
+'''
+Might help to always put arm back to some level or even to let it sit
+at x=0 always? not sure. Could also constantly reset the X to 82 or whatever
+'''
+
+
+import cv2
+import numpy as np
+from uf.wrapper.swift_api import SwiftAPI
+import time
+
+# what's the maximum in positive that the arm can do?
+ARM_Y_MAX = 220
+
+RESCALE_FACTOR = 0.5
+cap = cv2.VideoCapture(1)
+
+WIDTH = int(1280*RESCALE_FACTOR)
+HEIGHT = int(720*RESCALE_FACTOR)
+cap.set(3, WIDTH)
+cap.set(4, HEIGHT)
+
+# could not open port 'COM4': PermissionError(13, 'Access is denied.', None, 5)
+accessed = False
+while not accessed:
+    try:
+        swift = SwiftAPI()
+        accessed = True
+    except Exception as e:
+        time.sleep(0.2)
+
+print('device info: ')
+print(swift.get_device_info())
+swift_r = swift.set_gripper(True)
+swift.set_position(x=200, y=0, z=5, relative=False, speed=20000, wait=True)
+swift_r = swift.send_cmd_sync("M204 P600 R600 T600\n")
+swift.set_position(x=200, y=0, z=2, relative=False, speed=20000, wait=True)
+
+
+for i in range(15):
+    _, frame = cap.read()
+
+#r = cv2.selectROI(frame)
+#print(r)
+#time.sleep(555)
+r = (66, 21, 560, 270)
+
+# so it doesnt keep swinging to hit puck:
+since_swing = 9999
+move_count = 0
+
+while(1):
+    time.sleep(0.2)
+    _, frame = cap.read()
+
+    img_crop = frame[int(r[1]):int(r[1]+r[3]), int(r[0]):int(r[0]+r[2])]
+
+    # Display cropped image
+    cv2.imshow('Raw', frame)
+    hsv = cv2.cvtColor(img_crop, cv2.COLOR_BGR2HSV)
+
+    lower_red = np.array([0, 125, 0])
+    upper_red = np.array([20, 255, 255])
+
+    mask = cv2.inRange(hsv, lower_red, upper_red)
+    res = cv2.bitwise_and(img_crop, img_crop, mask=mask)
+    blur = cv2.GaussianBlur(res, (15, 15), 0)
+    cv2.imshow('Gaussian Blurring', blur)
+
+    _, puck = cv2.threshold(blur, 100, 255, cv2.THRESH_BINARY)
+    cv2.imshow('Puck', puck)
+
+    xs = np.where(puck != 0)[1]
+    ys = np.where(puck != 0)[0]
+
+    xstd = np.std(xs)
+    ystd = np.std(ys)
+
+    x_init_avg = np.mean(xs)
+    y_init_avg = np.mean(ys)
+
+    # possibly if std is too high, we can consider that we have a problem?
+    print(xstd, ystd)
+
+    xs = [x for x in xs if x <= x_init_avg+xstd or x >= x_init_avg-xstd]
+    ys = [y for y in ys if y <= y_init_avg+xstd or y >= y_init_avg-xstd]
+    xavg = np.mean(xs)
+    yavg = np.mean(ys)
+
+    cropped_height, cropped_width, channels = img_crop.shape
+
+    puck_x = xavg/cropped_width*100
+    puck_y = yavg/cropped_height*100
+    print("Puck X: {}%    Puck Y: {}%".format(puck_x, puck_y))
+
+    # get the actual desired y position
+    desired_arm_y = ((puck_y/100.0)*(ARM_Y_MAX*2))-ARM_Y_MAX
+
+    print('DESIRED Y=', desired_arm_y, since_swing)
+
+    if len(xs)>5:
+        swift.set_position(y=desired_arm_y, x=200, z=2, speed=1000000)
+
+    if puck_x > 80 and since_swing >= 20:
+        swift_r = swift.send_cmd_sync("M204 P5000 R5000 T5000\n")
+        swift.set_position(x=50, relative=True, speed=1000000)
+        swift_r = swift.send_cmd_sync("M204 P500 R500 T500\n")
+        swift.set_position(x=-50, relative=True, speed=1000000)
+        since_swing = 0
+
+    since_swing += 1
+
+    swift.set_servo_angle(3, 90)
+    swift.flush_cmd()
+
+    k = cv2.waitKey(5) & 0xFF
+    if k == 27:
+        break
